@@ -1,0 +1,91 @@
+name: Snyk container scan and monitor
+
+on:
+  workflow_call:
+    secrets:
+      SNYK_TOKEN:
+        required: true
+      SNYK_MONITOR_TOKEN:
+        required: true
+    paths:
+      - '**.yml'
+      - '**.yaml'
+
+jobs:
+  extract_images_and_scan:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: 16
+
+    - name: Install dependencies
+      run: npm install yaml
+
+    - name: Run image registry diff script and save output
+      run: |
+        node .github/scripts/extractImageFromYaml.js > images_list.txt
+        echo "IMAGES_FILE=${GITHUB_WORKSPACE}/images_list.txt" >> $GITHUB_ENV
+
+    - name: Install Snyk CLI
+      run: npm install -g snyk@latest
+
+    - name: Authenticate Snyk CLI
+      run: snyk auth ${{ secrets.SNYK_TOKEN }}
+
+    - name: Install jq
+      run: sudo apt-get install jq
+
+    - name: Scan images with Snyk and check for vulnerabilities
+      run: |
+        touch critical_images.txt
+        tr ' ' '\n' < $IMAGES_FILE > images_list_processed.txt
+        while IFS=" " read -r image; do
+          echo "Testing image: $image"
+          snyk container test "$image" --username='${{ secrets.DOCKERHUB_USERNAME }}' --password='${{ secrets.DOCKERHUB_TOKEN }}' --severity-threshold=critical --json > snyk_output.json || true
+          #remove all non-printable ASCII characters
+          cat snyk_output.json | tr -d '\000-\031' > snyk_output_clean.json
+          if grep -q '"summary": "No high or critical severity vulnerabilities"' snyk_output_clean.json; then
+            echo "VUL_FOUND=false" >> $GITHUB_ENV
+          else
+            echo "VUL_FOUND=true" >> $GITHUB_ENV
+            echo "Running Snyk monitor for image: $image"
+            SNYK_MONITOR_OUTPUT=$(SNYK_TOKEN=${{ secrets.SNYK_MONITOR_TOKEN }} snyk container monitor "$image" --username='${{ secrets.DOCKERHUB_USERNAME }}' --password='${{ secrets.DOCKERHUB_TOKEN }}' || true)
+            echo "Snyk monitor output: $SNYK_MONITOR_OUTPUT"
+            snapshot=$(grep -o 'https://.*' <<<"$SNYK_MONITOR_OUTPUT")
+            echo "Parsed snapshot URL: $snapshot"
+            echo "$image :" >> critical_images.txt
+            echo "$snapshot" >> critical_images.txt
+          fi
+        done < images_list_processed.txt
+        cat critical_images.txt
+
+    - name: Comment on PR if vulnerabilities found
+      uses: actions/github-script@v5
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          const fs = require('fs');
+          const lines = fs.readFileSync('critical_images.txt', 'utf8').split('\n').filter(Boolean);
+          if (process.env.VUL_FOUND === 'true') {
+            let body = 'The following images have vulnerabilities:\n\n';
+            let currentImage = '';
+            for (const line of lines) {
+              if (line.includes(' : ')) {
+                currentImage = line.split(' : ')[0];
+                body += `${currentImage}:\n`;
+              } else {
+                body += `- ${line}\n`;
+              }
+            }
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body,
+            });
+          }
