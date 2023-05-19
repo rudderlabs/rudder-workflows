@@ -7,9 +7,6 @@ on:
         required: true
       SNYK_MONITOR_TOKEN:
         required: true
-    paths:
-      - '**.yml'
-      - '**.yaml'
 
 jobs:
   extract_images_and_scan:
