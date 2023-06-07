@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: redshift-test
+spec:
+  containers:
+  - name: redshift-test  
+    image: postgres:13
+    command: ["sleep", "3600"]
+  restartPolicy: Never
+  deployment_service:  
+    repository: rudderstack/deployment-service
+    tag: v1.3.0
+  deployment_service_duplicate:
+    repository: rudderstack/deployment-service
+    version: v1.3.0
+  deployment_service_master:
+    image: rudderstack/deployment-service:master
+  config_backend:
+    image: rudderstack/rudder-config-be
+    version: master
