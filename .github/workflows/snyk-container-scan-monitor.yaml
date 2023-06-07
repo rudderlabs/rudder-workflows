@@ -1,21 +1,12 @@
 name: Snyk container scan and monitor
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - '*.yml'
-      - '*.yaml'
-  workflow_dispatch:
-
-# on:
-#   workflow_call:
-#     secrets:
-#       SNYK_TOKEN:
-#         required: true
-#       SNYK_MONITOR_TOKEN:
-#         required: true
+  workflow_call:
+    secrets:
+      SNYK_TOKEN:
+        required: true
+      SNYK_MONITOR_TOKEN:
+        required: true
 
 jobs:
   extract_images_and_scan:
