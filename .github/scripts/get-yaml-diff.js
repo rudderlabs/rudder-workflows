@@ -20,32 +20,36 @@ function extractKeys(obj, keys) {
 }
 
 async function run() {
-    const { data: files } = await octokit.pulls.listFiles({
-        owner,
-        repo,
-        pull_number: prNumber
-    });
+    try {
+        const { data: files } = await octokit.pulls.listFiles({
+            owner,
+            repo,
+            pull_number: prNumber
+        });
 
-    for (const file of files) {
-        if (!file.filename.includes('/') && (file.filename.endsWith('.yaml') || file.filename.endsWith('.yml'))) {
-            const { data: contents } = await octokit.repos.getContent({
-                owner,
-                repo,
-                path: file.filename,
-                ref: 'refs/pull/' + prNumber + '/head'
-            });
+        for (const file of files) {
+            if (!file.filename.includes('/') && (file.filename.endsWith('.yaml') || file.filename.endsWith('.yml'))) {
+                const { data: contents } = await octokit.repos.getContent({
+                    owner,
+                    repo,
+                    path: file.filename,
+                    ref: 'refs/pull/' + prNumber + '/head'
+                });
 
-            const content = Buffer.from(contents.content, 'base64').toString();
-            const doc = yaml.safeLoad(content);
+                const content = Buffer.from(contents.content, 'base64').toString();
+                const doc = yaml.load(content);  // changed from yaml.safeLoad to yaml.load
 
-            const keysToExtract = ['image', 'tag', 'version', 'repository'];
-            let extractedValues = extractKeys(doc, keysToExtract);
+                const keysToExtract = ['image', 'tag', 'version', 'repository'];
+                let extractedValues = extractKeys(doc, keysToExtract);
 
-            // ensure the values are unique
-            let uniqueValues = [...new Set(extractedValues)];
+                // ensure the values are unique
+                let uniqueValues = [...new Set(extractedValues)];
 
-            console.log(`Values from ${file.filename}: `, uniqueValues);
+                console.log(`Values from ${file.filename}: `, uniqueValues);
+            }
         }
+    } catch (error) {
+        console.error("Error: ", error);
     }
 }
 
