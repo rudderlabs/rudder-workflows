@@ -28,13 +28,15 @@ function extractChangesFromPatch(patch) {
     const lines = patch.split('\n');
     for (let line of lines) {
         if (line.startsWith('+') && !line.startsWith('+++')) {
-            changes.push(line.slice(1).trim());
+            let value = line.slice(1).trim().split(':')[1]?.trim();
+            if(value) changes.push(value);
         }
     }
     return changes;
 }
 
 run();
+
 
 
 // const { Octokit } = require('@octokit/rest');
