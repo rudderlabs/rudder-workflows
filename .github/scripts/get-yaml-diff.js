@@ -4,6 +4,9 @@ const owner = process.env.GITHUB_REPOSITORY.split('/')[0];
 const repo = process.env.GITHUB_REPOSITORY.split('/')[1];
 const prNumber = process.env.GITHUB_REF.split('/')[2];
 
+// Specify the list of paths here
+const pathsToCheck = ['./'];
+
 async function run() {
     const { data: files } = await octokit.pulls.listFiles({
         owner,
@@ -12,7 +15,9 @@ async function run() {
     });
 
     for (const file of files) {
-        if (file.filename.endsWith('.yaml') || file.filename.endsWith('.yml')) {
+        // check if the file is in one of the specified paths
+        if (pathsToCheck.some(path => file.filename.startsWith(path)) && 
+            (file.filename.endsWith('.yaml') || file.filename.endsWith('.yml'))) {
             console.log(`Changes in file ${file.filename}:`);
             console.log(file.patch);
         }
