@@ -21,7 +21,14 @@ jobs:
         node-version: 16
 
     - name: Install dependencies
-      run: npm install yaml
+      run: npm install yaml @octokit/rest js-yaml
+
+    - name: Get YAML changes
+      run: |
+        node .github/scripts/get-yaml-diff.js > yaml_diff.txt
+        echo "DIFF_FILE=${GITHUB_WORKSPACE}/yaml_diff.txt" >> $GITHUB_ENV
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Run image registry diff script and save output
       run: |
@@ -37,29 +44,15 @@ jobs:
     - name: Install jq
       run: sudo apt-get install jq
 
-    - name: Scan images with Snyk and check for vulnerabilities
+    - name: Run Snyk scan script
       run: |
-        touch critical_images.txt
-        tr ' ' '\n' < $IMAGES_FILE > images_list_processed.txt
-        while IFS=" " read -r image; do
-          echo "Testing image: $image"
-          snyk container test "$image" --username='${{ secrets.DOCKERHUB_USERNAME }}' --password='${{ secrets.DOCKERHUB_TOKEN }}' --severity-threshold=critical --json > snyk_output.json || true
-          #remove all non-printable ASCII characters
-          cat snyk_output.json | tr -d '\000-\031' > snyk_output_clean.json
-          if grep -q '"summary": "No high or critical severity vulnerabilities"' snyk_output_clean.json; then
-            echo "VUL_FOUND=false" >> $GITHUB_ENV
-          else
-            echo "VUL_FOUND=true" >> $GITHUB_ENV
-            echo "Running Snyk monitor for image: $image"
-            SNYK_MONITOR_OUTPUT=$(SNYK_TOKEN=${{ secrets.SNYK_MONITOR_TOKEN }} snyk container monitor "$image" --username='${{ secrets.DOCKERHUB_USERNAME }}' --password='${{ secrets.DOCKERHUB_TOKEN }}' || true)
-            echo "Snyk monitor output: $SNYK_MONITOR_OUTPUT"
-            snapshot=$(grep -o 'https://.*' <<<"$SNYK_MONITOR_OUTPUT")
-            echo "Parsed snapshot URL: $snapshot"
-            echo "$image :" >> critical_images.txt
-            echo "$snapshot" >> critical_images.txt
-          fi
-        done < images_list_processed.txt
-        cat critical_images.txt
+        node .github/scripts/snyk_scan.js > critical_images.txt
+      env:
+        DIFF_FILE: ${{ env.DIFF_FILE }}
+        IMAGES_FILE: ${{ env.IMAGES_FILE }}
+        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        SNYK_MONITOR_TOKEN: ${{ secrets.SNYK_MONITOR_TOKEN }}
 
     - name: Comment on PR if vulnerabilities found
       uses: actions/github-script@v5
