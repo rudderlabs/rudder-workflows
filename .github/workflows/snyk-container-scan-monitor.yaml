@@ -46,7 +46,7 @@ jobs:
 
     - name: Run Snyk scan script
       run: |
-        node .github/scripts/snyk_scan.js > critical_images.txt
+        node .github/scripts/snyk_container_scan.js > critical_images.txt
       env:
         DIFF_FILE: ${{ env.DIFF_FILE }}
         IMAGES_FILE: ${{ env.IMAGES_FILE }}
