@@ -4,8 +4,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - '**.yml'
-      - '**.yaml'
+      - '*.yml'
+      - '*.yaml'
 
 jobs:
   check-yaml:
