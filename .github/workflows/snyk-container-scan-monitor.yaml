@@ -53,6 +53,7 @@ jobs:
 
     - name: Run Snyk scan script
       run: |
+        touch critical_images.txt
         node .github/scripts/snyk_container_scan.js > critical_images.txt
         cat critical_images.txt
         if [ -s "critical_images.txt" ]; then echo "VUL_FOUND=true" >> $GITHUB_ENV; fi
@@ -69,7 +70,6 @@ jobs:
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
-          const context = github.context;
           const fs = require('fs');
           const scanResults = fs.readFileSync('critical_images.txt', 'utf8').split('\n').filter(Boolean);
 
@@ -77,14 +77,10 @@ jobs:
             const body = 'The following images have vulnerabilities:\n\n' +
               scanResults.map(result => `- ${result}`).join('\n');
 
-            const context = github.context;
-            const issueNumber = context.payload.pull_request.number;
-            const repoOwner = context.repo.owner;
-            const repoName = context.repo.repo;
             github.rest.issues.createComment({
-              issue_number: issueNumber,
-              owner: repoOwner,
-              repo: repoName,
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
               body: body,
             });
           }
