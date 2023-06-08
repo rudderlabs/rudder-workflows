@@ -54,6 +54,7 @@ jobs:
     - name: Run Snyk scan script
       run: |
         node .github/scripts/snyk_container_scan.js > critical_images.txt
+        cat critical_images.txt
       env:
         DIFF_FILE: ${{ env.DIFF_FILE }}
         IMAGES_FILE: ${{ env.IMAGES_FILE }}
@@ -61,28 +62,27 @@ jobs:
         DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         SNYK_MONITOR_TOKEN: ${{ secrets.SNYK_MONITOR_TOKEN }}
 
+
     - name: Comment on PR if vulnerabilities found
       uses: actions/github-script@v5
       with:
-        github-token: ${{secrets.GITHUB_TOKEN}}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
           const fs = require('fs');
-          const lines = fs.readFileSync('critical_images.txt', 'utf8').split('\n').filter(Boolean);
+          const scanResults = fs.readFileSync('critical_images.txt', 'utf8').split('\n').filter(Boolean);
+
           if (process.env.VUL_FOUND === 'true') {
-            let body = 'The following images have vulnerabilities:\n\n';
-            let currentImage = '';
-            for (const line of lines) {
-              if (line.includes(' : ')) {
-                currentImage = line.split(' : ')[0];
-                body += `${currentImage}:\n`;
-              } else {
-                body += `- ${line}\n`;
-              }
-            }
+            const body = 'The following images have vulnerabilities:\n\n' +
+              scanResults.map(result => `- ${result}`).join('\n');
+
+            const context = github.context;
+            const issueNumber = context.payload.pull_request.number;
+            const repoOwner = context.repo.owner;
+            const repoName = context.repo.repo;
             github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+              issue_number: issueNumber,
+              owner: repoOwner,
+              repo: repoName,
               body: body,
             });
           }
