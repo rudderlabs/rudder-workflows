@@ -55,6 +55,7 @@ jobs:
       run: |
         node .github/scripts/snyk_container_scan.js > critical_images.txt
         cat critical_images.txt
+        if [ -s "critical_images.txt" ]; then echo "VUL_FOUND=true" >> $GITHUB_ENV; fi
       env:
         DIFF_FILE: ${{ env.DIFF_FILE }}
         IMAGES_FILE: ${{ env.IMAGES_FILE }}
