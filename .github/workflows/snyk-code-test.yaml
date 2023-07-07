@@ -44,21 +44,20 @@ jobs:
           const fs = require('fs');
           const highSeverityVulnerabilities = fs.readFileSync('snyk-results.json', 'utf8');
           const vulnerabilities = JSON.parse(highSeverityVulnerabilities);
-          const jq = require('./node_modules/node-jq');
-          const filter = '.runs[0].results[] | {Vulnerability: .ruleId, info: .message.text, Path: .locations[0].physicalLocation.artifactLocation.uri, Line: .locations[0].physicalLocation.region.startLine}';
-          jq.run(filter, vulnerabilities, { input: 'json', output: 'json' }).then((filteredData) => {
-            const issueComment = `**Snyk found the following high severity vulnerabilities:**
-            \`\`\`
-            ${JSON.stringify(filteredData, null, 2)}
-            \`\`\`
-            `;
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: issueComment
-            });
+          const filteredData = vulnerabilities.runs[0].results.map(result => ({
+            Vulnerability: result.ruleId,
+            Info: result.message.text,
+            Path: result.locations[0].physicalLocation.artifactLocation.uri,
+            Line: result.locations[0].physicalLocation.region.startLine
+          }));
+          const issueComment = `**Snyk found the following high severity vulnerabilities:**\n\n\`\`\`\n${JSON.stringify(filteredData, null, 2)}\n\`\`\``;
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: issueComment
           });
+
     - name: Fail CI check if high severity vulnerabilities are detected
       run: exit 1
       if: env.VUL_FOUND == 'true'
