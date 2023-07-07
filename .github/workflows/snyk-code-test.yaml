@@ -33,11 +33,18 @@ jobs:
         else
           echo "VUL_FOUND=false" >> $GITHUB_ENV
         fi
+
+    - name: Install sarif-to-json
+      run: npm install -g sarif-to-json
+
     - name: Post vulnerabilities in comments
       if: env.VUL_FOUND == 'true'
       run: |
         if [ -s "snyk-results.json" ]; then
-          cat snyk-results.json | jq -r '.runs[0].results[] | "**Vulnerability:** \(.ruleId)\n**Info:** \(.message.text)\n**Path:** \(.locations[0].physicalLocation.artifactLocation.uri)\n**Line:** \(.locations[0].physicalLocation.region.startLine)\n\n---\n"' > snyk-comments.txt
+          # Convert SARIF to JSON format
+          npx sarif-to-json snyk-results.json > snyk-results.json.json
+          # Extract vulnerability information from the JSON file
+          cat snyk-results.json.json | jq -r '.runs[0].results[] | "**Vulnerability:** \(.ruleId)\n**Info:** \(.message.text)\n**Path:** \(.locations[0].physicalLocation.artifactLocation.uri)\n**Line:** \(.locations[0].physicalLocation.region.startLine)\n\n---\n"' > snyk-comments.txt
           echo "::set-output name=snyk_comments::$(cat snyk-comments.txt)"
         else
           echo "No vulnerabilities found."
@@ -60,6 +67,7 @@ jobs:
               body: issueComment
             });
           }
+
 
 
     - name: Fail CI check if high severity vulnerabilities are detected
