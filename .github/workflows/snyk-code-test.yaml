@@ -9,7 +9,6 @@ on:
 jobs:
   snyk_code_test:
     runs-on: ubuntu-latest
-
     steps:
     - name: Check out repository
       uses: actions/checkout@v2
@@ -18,6 +17,9 @@ jobs:
       uses: actions/setup-node@v2
       with:
         node-version: 14
+
+    - name: Install node-jq
+      run: npm install node-jq
 
     - name: Install Snyk CLI
       run: npm install -g snyk
@@ -33,51 +35,30 @@ jobs:
         else
           echo "VUL_FOUND=false" >> $GITHUB_ENV
         fi
-
+        
     - name: Post vulnerabilities in comments
       if: env.VUL_FOUND == 'true'
-      run: |
-        if [ -s "snyk-results.json" ]; then
-          # Read the snyk-results.json file
-          highSeverityVulnerabilities=$(cat snyk-results.json)
-
-          # Extract vulnerability information using JavaScript
-          filteredData=$(node -e "
-            const vulnerabilities = JSON.parse(process.argv[1]);
-            const filteredData = vulnerabilities.runs[0].results.map(result => ({
-              Vulnerability: result.ruleId,
-              Info: result.message.text,
-              Path: result.locations[0].physicalLocation.artifactLocation.uri,
-              Line: result.locations[0].physicalLocation.region.startLine
-            }));
-            console.log(JSON.stringify(filteredData));
-          " "$highSeverityVulnerabilities")
-
-          # Store the filtered data in a file
-          echo "$filteredData" > snyk-comments.txt
-          echo "::set-output name=snyk_comments::$(cat snyk-comments.txt)"
-        else
-          echo "No vulnerabilities found."
-          echo "::set-output name=snyk_comments::"
-        fi
-
-    - name: Comment on PR if vulnerabilities found
-      if: env.VUL_FOUND == 'true' && steps.post-vulnerabilities.outputs.snyk_comments != ''
       uses: actions/github-script@v5
       with:
         script: |
           const fs = require('fs');
-          const comments = fs.readFileSync('snyk-comments.txt', 'utf8');
-          if (comments) {
-            const issueComment = `**Snyk found the following high severity vulnerabilities:**\n\n${comments}`;
+          const highSeverityVulnerabilities = fs.readFileSync('snyk-results.json', 'utf8');
+          const vulnerabilities = JSON.parse(highSeverityVulnerabilities);
+          const jq = require('./node_modules/node-jq');
+          const filter = '.runs[0].results[] | {Vulnerability: .ruleId, info: .message.text, Path: .locations[0].physicalLocation.artifactLocation.uri, Line: .locations[0].physicalLocation.region.startLine}';
+          jq.run(filter, vulnerabilities, { input: 'json', output: 'json' }).then((filteredData) => {
+            const issueComment = `**Snyk found the following high severity vulnerabilities:**
+            \`\`\`
+            ${JSON.stringify(filteredData, null, 2)}
+            \`\`\`
+            `;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: issueComment
             });
-          }
-
+          });
     - name: Fail CI check if high severity vulnerabilities are detected
       run: exit 1
       if: env.VUL_FOUND == 'true'
