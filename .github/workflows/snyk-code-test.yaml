@@ -33,28 +33,34 @@ jobs:
         else
           echo "VUL_FOUND=false" >> $GITHUB_ENV
         fi
-
     - name: Post vulnerabilities in comments
       if: env.VUL_FOUND == 'true'
       run: |
-        cat snyk-results.json | jq -r '.runs[0].results[] | "**Vulnerability:** \(.ruleId)\n**Info:** \(.message.text)\n**Path:** \(.locations[0].physicalLocation.artifactLocation.uri)\n**Line:** \(.locations[0].physicalLocation.region.startLine)\n\n---\n"'
-        > snyk-comments.txt
-        echo "::set-output name=snyk_comments::$(cat snyk-comments.txt)"
+        if [ -s "snyk-results.json" ]; then
+          cat snyk-results.json | jq -r '.runs[0].results[] | "**Vulnerability:** \(.ruleId)\n**Info:** \(.message.text)\n**Path:** \(.locations[0].physicalLocation.artifactLocation.uri)\n**Line:** \(.locations[0].physicalLocation.region.startLine)\n\n---\n"' > snyk-comments.txt
+          echo "::set-output name=snyk_comments::$(cat snyk-comments.txt)"
+        else
+          echo "No vulnerabilities found."
+          echo "::set-output name=snyk_comments::"
+        fi
 
     - name: Comment on PR if vulnerabilities found
-      if: env.VUL_FOUND == 'true'
+      if: env.VUL_FOUND == 'true' && steps.post-vulnerabilities.outputs.snyk_comments != ''
       uses: actions/github-script@v5
       with:
         script: |
           const fs = require('fs');
           const comments = fs.readFileSync('snyk-comments.txt', 'utf8');
-          const issueComment = `**Snyk found the following high severity vulnerabilities:**\n\n${comments}`;
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: issueComment
-          });
+          if (comments) {
+            const issueComment = `**Snyk found the following high severity vulnerabilities:**\n\n${comments}`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: issueComment
+            });
+          }
+
 
     - name: Fail CI check if high severity vulnerabilities are detected
       run: exit 1
